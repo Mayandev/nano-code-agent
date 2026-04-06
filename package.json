@@ -1,0 +1,43 @@
+{
+  "name": "claude-nano",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx src/index.tsx",
+    "build": "tsup src/index.tsx --format esm --dts",
+    "start": "node dist/index.js"
+  },
+  "bin": {
+    "claude-nano": "./dist/index.js"
+  },
+  "keywords": [
+    "cli",
+    "agent",
+    "llm",
+    "code-agent"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "diff": "^8.0.4",
+    "dotenv": "^17.4.1",
+    "glob": "^13.0.6",
+    "ink": "^5.2.1",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
+    "openai": "^6.33.0",
+    "ora": "^8.2.0",
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/diff": "^7.0.2",
+    "@types/node": "^25.5.2",
+    "@types/react": "^19.2.14",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.2"
+  },
+  "description": ""
+}
