@@ -3,6 +3,9 @@ import { LLMClient } from "./llm.js";
 import { ToolRegistry, createDefaultRegistry } from "./tools/index.js";
 import { countMessagesTokens, trimHistory, truncateToolOutput } from "./context.js";
 import { buildSystemPrompt } from "./system-prompt.js";
+import { isPathSafe, checkDangerousCommand, isBlockedInPlanMode, shouldAutoApprove } from "./safety.js";
+import { setSubAgentContext } from "./tools/sub_agent.js";
+import { McpManager, loadMcpConfig } from "./mcp.js";
 
 export class Agent {
   private llm: LLMClient;
@@ -11,6 +14,7 @@ export class Agent {
   private config: Config;
   private systemPrompt: string;
   private confirmHandler: ((toolName: string, args: Record<string, unknown>) => Promise<boolean>) | null = null;
+  private mcpManager: McpManager = new McpManager();
 
   constructor(config: Config) {
     this.config = config;
@@ -18,6 +22,14 @@ export class Agent {
     this.registry = createDefaultRegistry();
     this.systemPrompt = buildSystemPrompt(process.cwd());
     this.messages.push({ role: "system", content: this.systemPrompt });
+
+    setSubAgentContext({
+      apiKey: config.apiKey,
+      baseURL: config.baseURL,
+      model: config.model,
+      maxTokens: config.maxTokens,
+      registry: this.registry,
+    });
   }
 
   setConfirmHandler(handler: (toolName: string, args: Record<string, unknown>) => Promise<boolean>): void {
@@ -34,6 +46,28 @@ export class Agent {
 
   restoreMessages(messages: ChatMessage[]): void {
     this.messages = [{ role: "system", content: this.systemPrompt }, ...messages.filter((m) => m.role !== "system")];
+  }
+
+  async initMcp(): Promise<number> {
+    const servers = await loadMcpConfig();
+    for (const server of servers) {
+      try {
+        await this.mcpManager.connect(server);
+      } catch (err) {
+        console.error(`MCP: failed to connect to ${server.name}: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+    if (this.mcpManager.serverCount > 0) {
+      await this.mcpManager.refreshTools();
+      for (const tool of this.mcpManager.getTools()) {
+        this.registry.register(tool);
+      }
+    }
+    return this.mcpManager.serverCount;
+  }
+
+  async destroy(): Promise<void> {
+    await this.mcpManager.disconnectAll();
   }
 
   getModel(): string {
@@ -126,7 +160,42 @@ export class Agent {
         }
 
         const toolDef = this.registry.get(tc.name);
-        if (toolDef?.requiresConfirmation && !this.config.autoApprove && this.confirmHandler) {
+
+        if (this.config.permissionMode === "plan" && isBlockedInPlanMode(tc.name)) {
+          const blocked = `Tool "${tc.name}" is blocked in plan mode (read-only).`;
+          this.messages.push({ role: "tool", tool_call_id: tc.id, content: blocked });
+          yield { type: "tool_result", toolCall: toolInfo, toolResult: blocked };
+          continue;
+        }
+
+        const filePath = args.file_path as string | undefined;
+        if (filePath && (tc.name === "write_file" || tc.name === "edit_file")) {
+          const pathCheck = isPathSafe(filePath, process.cwd());
+          if (!pathCheck.safe) {
+            const blocked = `Blocked: ${pathCheck.reason}`;
+            this.messages.push({ role: "tool", tool_call_id: tc.id, content: blocked });
+            yield { type: "tool_result", toolCall: toolInfo, toolResult: blocked };
+            continue;
+          }
+        }
+
+        if (tc.name === "shell_exec") {
+          const cmd = String(args.command ?? "");
+          const dangerCheck = checkDangerousCommand(cmd);
+          if (dangerCheck.dangerous) {
+            const blocked = `Blocked dangerous command: ${dangerCheck.reason}. Command: ${cmd}`;
+            this.messages.push({ role: "tool", tool_call_id: tc.id, content: blocked });
+            yield { type: "tool_result", toolCall: toolInfo, toolResult: blocked };
+            continue;
+          }
+        }
+
+        const autoApproveThisTool = shouldAutoApprove(
+          this.config.permissionMode,
+          tc.name,
+          toolDef?.requiresConfirmation ?? true
+        );
+        if (!autoApproveThisTool && this.confirmHandler) {
           const approved = await this.confirmHandler(tc.name, args);
           if (!approved) {
             const denied = "Tool call denied by user.";

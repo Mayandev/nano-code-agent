@@ -1,7 +1,29 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { exec } from "node:child_process";
+import { promisify } from "node:util";
 import { createPatch } from "diff";
 import type { ToolDefinition } from "../types.js";
+
+const execAsync = promisify(exec);
+
+async function quickLintCheck(filePath: string): Promise<string | null> {
+  const ext = path.extname(filePath);
+  try {
+    if (ext === ".ts" || ext === ".tsx") {
+      await execAsync(`npx tsc --noEmit --pretty ${filePath}`, { timeout: 15000, cwd: path.dirname(filePath) });
+    } else if (ext === ".py") {
+      await execAsync(`python3 -c "import py_compile; py_compile.compile('${filePath}', doraise=True)"`, { timeout: 5000 });
+    } else {
+      return null;
+    }
+    return null;
+  } catch (err: unknown) {
+    const error = err as { stdout?: string; stderr?: string };
+    const output = ((error.stdout ?? "") + "\n" + (error.stderr ?? "")).trim();
+    return output || null;
+  }
+}
 
 export const editFileTool: ToolDefinition = {
   name: "edit_file",
@@ -46,6 +68,12 @@ export const editFileTool: ToolDefinition = {
 
     const patch = createPatch(filePath, content, updated, "", "", { context: 3 });
     await fs.writeFile(filePath, updated, "utf-8");
-    return `Replaced ${count} occurrence(s) in ${filePath}\n\n@@DIFF@@\n${patch}`;
+
+    let result = `Replaced ${count} occurrence(s) in ${filePath}`;
+    const lintErrors = await quickLintCheck(filePath);
+    if (lintErrors) {
+      result += `\n\n⚠ Lint/compile issues:\n${lintErrors}`;
+    }
+    return `${result}\n\n@@DIFF@@\n${patch}`;
   },
 };

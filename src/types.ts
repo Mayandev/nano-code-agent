@@ -23,6 +23,8 @@ export interface AgentEvent {
   toolResult?: string;
 }
 
+export type PermissionMode = "default" | "plan" | "auto" | "full";
+
 export interface Config {
   apiKey: string;
   baseURL: string;
@@ -30,5 +32,8 @@ export interface Config {
   maxTokens: number;
   maxContextTokens: number;
   autoApprove: boolean;
+  permissionMode: PermissionMode;
   resumeSession: string | null;
+  prompt: string | null;
+  jsonOutput: boolean;
 }

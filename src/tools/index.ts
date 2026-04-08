@@ -7,6 +7,9 @@ import { searchTool } from "./search.js";
 import { shellExecTool } from "./shell_exec.js";
 import { listDirTool } from "./list_dir.js";
 import { gitDiffTool, gitLogTool, gitCommitTool } from "./git.js";
+import { globTool } from "./glob.js";
+import { lintTool } from "./lint.js";
+import { subAgentTool, setSubAgentContext } from "./sub_agent.js";
 
 export class ToolRegistry {
   private tools = new Map<string, ToolDefinition>();
@@ -58,5 +61,8 @@ export function createDefaultRegistry(): ToolRegistry {
   registry.register(gitDiffTool);
   registry.register(gitLogTool);
   registry.register(gitCommitTool);
+  registry.register(globTool);
+  registry.register(lintTool);
+  registry.register(subAgentTool);
   return registry;
 }
