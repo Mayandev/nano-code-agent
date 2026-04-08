@@ -5,6 +5,7 @@ import { MessageList, type DisplayMessage } from "./MessageList.js";
 import { InputBar } from "./InputBar.js";
 import { Agent } from "../agent.js";
 import { formatConfirmationDetail } from "../permissions.js";
+import { renderStreamingMarkdown } from "../utils/markdown.js";
 import type { Config } from "../types.js";
 
 interface Props {
@@ -154,7 +155,7 @@ export function App({ config }: Props) {
 
       {streamText && (
         <Box>
-          <Text color="cyan">{streamText}</Text>
+          <Text>{renderStreamingMarkdown(streamText)}</Text>
           <Text dimColor>▋</Text>
         </Box>
       )}

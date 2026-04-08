@@ -1,6 +1,7 @@
 import React from "react";
 import { Box, Text } from "ink";
 import { ToolCallView } from "./ToolCallView.js";
+import { renderMarkdown } from "../utils/markdown.js";
 import type { ToolCallInfo } from "../types.js";
 
 export interface DisplayMessage {
@@ -37,7 +38,7 @@ function MessageView({ message }: { message: DisplayMessage }) {
   if (message.role === "assistant") {
     return (
       <Box>
-        <Text color="cyan">{message.content}</Text>
+        <Text>{renderMarkdown(message.content)}</Text>
       </Box>
     );
   }
