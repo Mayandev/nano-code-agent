@@ -1,11 +1,23 @@
 import dotenv from "dotenv";
 import type { Config } from "./types.js";
+import { getLastSessionId } from "./session.js";
 
 dotenv.config();
 
 export function loadConfig(): Config {
   const args = process.argv.slice(2);
   const hasFlag = (flag: string) => args.includes(flag);
+  const getFlagValue = (flag: string): string | null => {
+    const idx = args.indexOf(flag);
+    return idx >= 0 && idx + 1 < args.length ? args[idx + 1]! : null;
+  };
+
+  let resumeSession: string | null = null;
+  if (hasFlag("-c") || hasFlag("--continue")) {
+    resumeSession = getLastSessionId();
+  } else if (hasFlag("--resume")) {
+    resumeSession = getFlagValue("--resume");
+  }
 
   return {
     apiKey: process.env.OPENAI_API_KEY ?? process.env.ARK_API_KEY ?? "",
@@ -14,5 +26,6 @@ export function loadConfig(): Config {
     maxTokens: parseInt(process.env.CLAUDE_NANO_MAX_TOKENS ?? "4096", 10),
     maxContextTokens: parseInt(process.env.CLAUDE_NANO_MAX_CONTEXT ?? "120000", 10),
     autoApprove: hasFlag("--auto-approve") || hasFlag("-y") || process.env.CLAUDE_NANO_AUTO_APPROVE === "true",
+    resumeSession,
   };
 }

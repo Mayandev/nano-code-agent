@@ -32,6 +32,10 @@ export class Agent {
     this.messages = [{ role: "system", content: this.systemPrompt }];
   }
 
+  restoreMessages(messages: ChatMessage[]): void {
+    this.messages = [{ role: "system", content: this.systemPrompt }, ...messages.filter((m) => m.role !== "system")];
+  }
+
   getModel(): string {
     return this.config.model;
   }

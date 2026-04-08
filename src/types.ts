@@ -30,4 +30,5 @@ export interface Config {
   maxTokens: number;
   maxContextTokens: number;
   autoApprove: boolean;
+  resumeSession: string | null;
 }

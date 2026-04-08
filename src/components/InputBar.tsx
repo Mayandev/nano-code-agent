@@ -8,6 +8,7 @@ const SLASH_COMMANDS = [
   { cmd: "/model", desc: "Show current model" },
   { cmd: "/cost", desc: "Show token usage stats" },
   { cmd: "/compact", desc: "Summarize conversation to save context" },
+  { cmd: "/sessions", desc: "List saved sessions" },
   { cmd: "/exit", desc: "Quit" },
 ];
 

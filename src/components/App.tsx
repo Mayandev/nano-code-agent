@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import { Box, Text, useApp, useInput } from "ink";
 import Spinner from "ink-spinner";
 import { MessageList, type DisplayMessage } from "./MessageList.js";
@@ -6,6 +6,7 @@ import { InputBar } from "./InputBar.js";
 import { Agent } from "../agent.js";
 import { formatConfirmationDetail } from "../permissions.js";
 import { renderStreamingMarkdown } from "../utils/markdown.js";
+import { createSessionId, saveSession, loadSession, listSessions } from "../session.js";
 import type { Config } from "../types.js";
 
 interface Props {
@@ -18,6 +19,8 @@ export function App({ config }: Props) {
   const [loading, setLoading] = useState(false);
   const [streamText, setStreamText] = useState("");
   const [agent] = useState(() => new Agent(config));
+  const sessionId = useRef(config.resumeSession ?? createSessionId());
+  const sessionCreatedAt = useRef<string | undefined>(undefined);
   const [pendingConfirm, setPendingConfirm] = useState<{
     toolName: string;
     args: Record<string, unknown>;
@@ -30,7 +33,22 @@ export function App({ config }: Props) {
         setPendingConfirm({ toolName, args, resolve });
       });
     });
-  }, [agent]);
+
+    if (config.resumeSession) {
+      const session = loadSession(config.resumeSession);
+      if (session) {
+        agent.restoreMessages(session.messages);
+        sessionCreatedAt.current = session.meta.createdAt;
+        const restored: DisplayMessage[] = session.messages
+          .filter((m) => m.role === "user" || m.role === "assistant")
+          .map((m) => ({
+            role: m.role as "user" | "assistant",
+            content: typeof m.content === "string" ? m.content : "",
+          }));
+        setMessages(restored);
+      }
+    }
+  }, [agent, config.resumeSession]);
 
   useInput((input, key) => {
     if (pendingConfirm) {
@@ -66,8 +84,23 @@ export function App({ config }: Props) {
           "- `/model` — Show current model\n" +
           "- `/cost` — Show token usage stats\n" +
           "- `/compact` — Summarize conversation to save context\n" +
-          "- `/exit` — Quit",
+          "- `/sessions` — List saved sessions\n" +
+          "- `/exit` — Quit\n\n" +
+          "**CLI flags:** `--resume <id>`, `-c` (continue last session)",
         );
+        return;
+      }
+      if (text === "/sessions") {
+        const sessions = listSessions();
+        if (sessions.length === 0) {
+          addSystemMsg("No saved sessions.");
+        } else {
+          const lines = sessions.slice(0, 10).map((s) => {
+            const date = new Date(s.updatedAt).toLocaleString();
+            return `- \`${s.id}\` ${date} (${s.messageCount} msgs) — ${s.summary}`;
+          });
+          addSystemMsg(`**Recent sessions:**\n${lines.join("\n")}\n\nResume with: \`claude-nano --resume <id>\``);
+        }
         return;
       }
       if (text === "/model") {
@@ -178,9 +211,10 @@ export function App({ config }: Props) {
       } finally {
         setLoading(false);
         setStreamText("");
+        saveSession(sessionId.current, agent.getMessages(), agent.getModel(), sessionCreatedAt.current);
       }
     },
-    [agent, exit],
+    [agent, exit, config],
   );
 
   return (
