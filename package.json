@@ -24,6 +24,7 @@
     "diff": "^8.0.4",
     "dotenv": "^17.4.1",
     "glob": "^13.0.6",
+    "gpt-tokenizer": "^3.4.0",
     "ink": "^5.2.1",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",

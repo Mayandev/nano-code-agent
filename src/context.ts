@@ -1,56 +1,68 @@
+import { encode } from "gpt-tokenizer";
 import type { ChatMessage } from "./types.js";
 
-const CHARS_PER_TOKEN = 4;
-
-export function estimateTokens(text: string): number {
-  return Math.ceil(text.length / CHARS_PER_TOKEN);
+export function countTokens(text: string): number {
+  return encode(text).length;
 }
 
-export function estimateMessagesTokens(messages: ChatMessage[]): number {
+export function countMessagesTokens(messages: ChatMessage[]): number {
   let total = 0;
   for (const msg of messages) {
     if (typeof msg.content === "string") {
-      total += estimateTokens(msg.content);
+      total += countTokens(msg.content);
     } else if (Array.isArray(msg.content)) {
       for (const part of msg.content) {
         if ("text" in part && typeof part.text === "string") {
-          total += estimateTokens(part.text);
+          total += countTokens(part.text);
         }
       }
     }
-    total += 4; // overhead per message (role, etc.)
+    total += 4; // per-message overhead (role, separators)
   }
   return total;
 }
 
-export function truncateToolOutput(output: string, maxChars = 8000): string {
+export function truncateToolOutput(output: string, maxChars = 8000, toolName?: string): string {
   if (output.length <= maxChars) return output;
+
+  const omitted = output.length - maxChars;
+  const note = `\n\n... (${omitted} characters omitted) ...\n\n`;
+
+  if (toolName === "shell_exec") {
+    const tailSize = Math.floor(maxChars * 0.8);
+    const headSize = maxChars - tailSize;
+    return output.slice(0, headSize) + note + output.slice(-tailSize);
+  }
+
+  if (toolName === "search") {
+    const lines = output.split("\n");
+    const maxLines = 50;
+    if (lines.length > maxLines) {
+      return lines.slice(0, maxLines).join("\n") + `\n\n... (${lines.length - maxLines} more lines) ...`;
+    }
+  }
 
   const headSize = Math.floor(maxChars * 0.7);
   const tailSize = Math.floor(maxChars * 0.2);
-  const head = output.slice(0, headSize);
-  const tail = output.slice(-tailSize);
-  const omitted = output.length - headSize - tailSize;
-
-  return `${head}\n\n... (${omitted} characters omitted) ...\n\n${tail}`;
+  return output.slice(0, headSize) + note + output.slice(-tailSize);
 }
 
 export function trimHistory(messages: ChatMessage[], maxTokens: number): ChatMessage[] {
   const system = messages[0];
   if (!system || system.role !== "system") return messages;
 
-  const currentTokens = estimateMessagesTokens(messages);
+  const currentTokens = countMessagesTokens(messages);
   if (currentTokens <= maxTokens) return messages;
 
   const result: ChatMessage[] = [system];
   const rest = messages.slice(1);
 
-  let tokensUsed = estimateMessagesTokens([system]);
+  let tokensUsed = countMessagesTokens([system]);
   const keep: ChatMessage[] = [];
 
   for (let i = rest.length - 1; i >= 0; i--) {
     const msg = rest[i]!;
-    const msgTokens = estimateMessagesTokens([msg]);
+    const msgTokens = countMessagesTokens([msg]);
     if (tokensUsed + msgTokens > maxTokens) break;
     tokensUsed += msgTokens;
     keep.unshift(msg);

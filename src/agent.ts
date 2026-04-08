@@ -1,32 +1,23 @@
 import type { ChatMessage, Config, AgentEvent, ToolCallInfo } from "./types.js";
 import { LLMClient } from "./llm.js";
 import { ToolRegistry, createDefaultRegistry } from "./tools/index.js";
-import { trimHistory, truncateToolOutput } from "./context.js";
-
-const SYSTEM_PROMPT = `You are Claude Nano, a powerful terminal-based coding assistant.
-
-You help users with software engineering tasks by reading, writing, and editing code files, searching codebases, and running shell commands.
-
-Guidelines:
-- Use tools to gather information before answering when needed.
-- When editing files, use edit_file with precise string matching rather than rewriting entire files.
-- Always verify your changes by reading the file after editing.
-- Be concise but thorough in your responses.
-- If a task requires multiple steps, execute them one at a time.
-- When running shell commands, prefer non-destructive commands.`;
+import { countMessagesTokens, trimHistory, truncateToolOutput } from "./context.js";
+import { buildSystemPrompt } from "./system-prompt.js";
 
 export class Agent {
   private llm: LLMClient;
   private registry: ToolRegistry;
   private messages: ChatMessage[] = [];
   private config: Config;
+  private systemPrompt: string;
   private confirmHandler: ((toolName: string, args: Record<string, unknown>) => Promise<boolean>) | null = null;
 
   constructor(config: Config) {
     this.config = config;
     this.llm = new LLMClient(config);
     this.registry = createDefaultRegistry();
-    this.messages.push({ role: "system", content: SYSTEM_PROMPT });
+    this.systemPrompt = buildSystemPrompt(process.cwd());
+    this.messages.push({ role: "system", content: this.systemPrompt });
   }
 
   setConfirmHandler(handler: (toolName: string, args: Record<string, unknown>) => Promise<boolean>): void {
@@ -38,7 +29,18 @@ export class Agent {
   }
 
   clearHistory(): void {
-    this.messages = [{ role: "system", content: SYSTEM_PROMPT }];
+    this.messages = [{ role: "system", content: this.systemPrompt }];
+  }
+
+  getModel(): string {
+    return this.config.model;
+  }
+
+  getStats(): { messages: number; tokens: number } {
+    return {
+      messages: this.messages.length,
+      tokens: countMessagesTokens(this.messages),
+    };
   }
 
   async *run(userMessage: string): AsyncGenerator<AgentEvent> {
@@ -131,7 +133,7 @@ export class Agent {
         }
 
         const rawResult = await this.registry.execute(tc.name, args);
-        const result = truncateToolOutput(rawResult);
+        const result = truncateToolOutput(rawResult, 8000, tc.name);
         this.messages.push({ role: "tool", tool_call_id: tc.id, content: result });
 
         yield { type: "tool_call_done", toolCall: toolInfo };

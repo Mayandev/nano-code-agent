@@ -44,6 +44,10 @@ export function App({ config }: Props) {
     }
   });
 
+  const addSystemMsg = useCallback((content: string) => {
+    setMessages((prev) => [...prev, { role: "assistant", content }]);
+  }, []);
+
   const handleSubmit = useCallback(
     async (text: string) => {
       if (text === "/exit" || text === "/quit") {
@@ -56,10 +60,45 @@ export function App({ config }: Props) {
         return;
       }
       if (text === "/help") {
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: "Commands: /exit, /clear, /help" },
-        ]);
+        addSystemMsg(
+          "**Commands:**\n" +
+          "- `/clear` — Clear conversation history\n" +
+          "- `/model` — Show current model\n" +
+          "- `/cost` — Show token usage stats\n" +
+          "- `/compact` — Summarize conversation to save context\n" +
+          "- `/exit` — Quit",
+        );
+        return;
+      }
+      if (text === "/model") {
+        addSystemMsg(`Current model: \`${agent.getModel()}\``);
+        return;
+      }
+      if (text === "/cost") {
+        const stats = agent.getStats();
+        addSystemMsg(
+          `**Session stats:**\n` +
+          `- Messages: ${stats.messages}\n` +
+          `- Tokens: ${stats.tokens.toLocaleString()}\n` +
+          `- Context limit: ~${config.maxContextTokens.toLocaleString()}`,
+        );
+        return;
+      }
+      if (text === "/compact") {
+        setMessages((prev) => [...prev, { role: "user", content: text }]);
+        setLoading(true);
+        try {
+          let summary = "";
+          for await (const event of agent.run(
+            "Summarize our conversation so far in a concise paragraph. This will replace the conversation history to save context space.",
+          )) {
+            if (event.type === "text_delta") summary += event.content ?? "";
+          }
+          agent.clearHistory();
+          addSystemMsg(`**Context compacted.** Summary:\n\n${summary}`);
+        } finally {
+          setLoading(false);
+        }
         return;
       }
 
