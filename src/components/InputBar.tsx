@@ -9,6 +9,8 @@ const SLASH_COMMANDS = [
   { cmd: "/cost", desc: "Show token usage stats" },
   { cmd: "/compact", desc: "Summarize conversation to save context" },
   { cmd: "/sessions", desc: "List saved sessions" },
+  { cmd: "/review", desc: "Review current git diff" },
+  { cmd: "/undo", desc: "Undo last checkpoint commit" },
   { cmd: "/exit", desc: "Quit" },
 ];
 

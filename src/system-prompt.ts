@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { execSync } from "node:child_process";
 
 const BASE_PROMPT = `You are Claude Nano, a powerful terminal-based coding assistant. You help users with software engineering tasks by using your tools to read, search, edit code, and run commands.
 
@@ -102,6 +103,39 @@ function scanProjectStructure(cwd: string, maxDepth = 2): string | null {
   return lines.join("\n");
 }
 
+function git(cmd: string, cwd: string): string | null {
+  try {
+    return execSync(`git ${cmd}`, { cwd, encoding: "utf-8", timeout: 5000 }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function loadGitContext(cwd: string): string | null {
+  const branch = git("branch --show-current", cwd);
+  if (!branch) return null;
+
+  const lines = [`- Git branch: \`${branch}\``];
+
+  const status = git("status --short", cwd);
+  if (status) {
+    const fileCount = status.split("\n").length;
+    lines.push(`- Uncommitted changes: ${fileCount} file(s)`);
+    if (fileCount <= 15) {
+      lines.push(`\`\`\`\n${status}\n\`\`\``);
+    }
+  } else {
+    lines.push("- Working tree: clean");
+  }
+
+  const log = git("log --oneline -5", cwd);
+  if (log) {
+    lines.push(`- Recent commits:\n\`\`\`\n${log}\n\`\`\``);
+  }
+
+  return lines.join("\n");
+}
+
 export function buildSystemPrompt(cwd: string): string {
   const parts = [BASE_PROMPT.trim()];
 
@@ -117,6 +151,11 @@ export function buildSystemPrompt(cwd: string): string {
     const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
     if (pkg.name) envLines.push(`- Project: ${pkg.name}@${pkg.version || "0.0.0"}`);
   } catch { /* not a node project */ }
+
+  const gitCtx = loadGitContext(cwd);
+  if (gitCtx) {
+    envLines.push(gitCtx);
+  }
 
   const structure = scanProjectStructure(cwd);
   if (structure) {

@@ -7,6 +7,7 @@ import { Agent } from "../agent.js";
 import { formatConfirmationDetail } from "../permissions.js";
 import { renderStreamingMarkdown } from "../utils/markdown.js";
 import { createSessionId, saveSession, loadSession, listSessions } from "../session.js";
+import { undoCheckpoint } from "../tools/git.js";
 import type { Config } from "../types.js";
 
 interface Props {
@@ -85,9 +86,57 @@ export function App({ config }: Props) {
           "- `/cost` — Show token usage stats\n" +
           "- `/compact` — Summarize conversation to save context\n" +
           "- `/sessions` — List saved sessions\n" +
+          "- `/review` — Ask Agent to review current git diff\n" +
+          "- `/undo` — Undo last checkpoint commit\n" +
           "- `/exit` — Quit\n\n" +
           "**CLI flags:** `--resume <id>`, `-c` (continue last session)",
         );
+        return;
+      }
+      if (text === "/undo") {
+        const result = undoCheckpoint();
+        addSystemMsg(result ?? "Not a git repository.");
+        return;
+      }
+      if (text.startsWith("/review")) {
+        setMessages((prev) => [...prev, { role: "user", content: text }]);
+        setLoading(true);
+        setStreamText("");
+        let currentText = "";
+        try {
+          for await (const event of agent.run(
+            "Review the current git diff. Use the git_diff tool to see changes, then provide a concise code review with: 1) summary of changes, 2) potential issues, 3) suggestions for improvement.",
+          )) {
+            if (event.type === "text_delta") {
+              currentText += event.content ?? "";
+              setStreamText(currentText);
+            } else if (event.type === "tool_call_start") {
+              if (currentText) {
+                setMessages((prev) => [...prev, { role: "assistant", content: currentText }]);
+                currentText = "";
+                setStreamText("");
+              }
+              setMessages((prev) => [...prev, { role: "tool_call", content: "", toolCall: event.toolCall, toolStatus: "running" }]);
+            } else if (event.type === "tool_result") {
+              setMessages((prev) => {
+                const updated = [...prev];
+                const idx = updated.findLastIndex((m) => m.role === "tool_call" && m.toolCall?.id === event.toolCall?.id);
+                if (idx >= 0) updated[idx] = { role: "tool_result", content: event.toolResult ?? "", toolCall: event.toolCall, toolStatus: "done" };
+                return updated;
+              });
+            } else if (event.type === "done" && currentText) {
+              setMessages((prev) => [...prev, { role: "assistant", content: currentText }]);
+              currentText = "";
+              setStreamText("");
+            }
+          }
+        } catch (err) {
+          addSystemMsg(`Error: ${err instanceof Error ? err.message : String(err)}`);
+        } finally {
+          setLoading(false);
+          setStreamText("");
+          saveSession(sessionId.current, agent.getMessages(), agent.getModel(), sessionCreatedAt.current);
+        }
         return;
       }
       if (text === "/sessions") {

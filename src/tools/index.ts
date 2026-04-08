@@ -6,6 +6,7 @@ import { editFileTool } from "./edit_file.js";
 import { searchTool } from "./search.js";
 import { shellExecTool } from "./shell_exec.js";
 import { listDirTool } from "./list_dir.js";
+import { gitDiffTool, gitLogTool, gitCommitTool } from "./git.js";
 
 export class ToolRegistry {
   private tools = new Map<string, ToolDefinition>();
@@ -54,5 +55,8 @@ export function createDefaultRegistry(): ToolRegistry {
   registry.register(searchTool);
   registry.register(shellExecTool);
   registry.register(listDirTool);
+  registry.register(gitDiffTool);
+  registry.register(gitLogTool);
+  registry.register(gitCommitTool);
   return registry;
 }
