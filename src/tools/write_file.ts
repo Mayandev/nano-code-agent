@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createPatch } from "diff";
 import type { ToolDefinition } from "../types.js";
 
 export const writeFileTool: ToolDefinition = {
@@ -19,8 +20,19 @@ export const writeFileTool: ToolDefinition = {
   execute: async (args) => {
     const filePath = path.resolve(String(args.file_path));
     await fs.mkdir(path.dirname(filePath), { recursive: true });
-    await fs.writeFile(filePath, String(args.content), "utf-8");
-    const lines = String(args.content).split("\n").length;
-    return `Written ${lines} lines to ${filePath}`;
+
+    let oldContent = "";
+    try {
+      oldContent = await fs.readFile(filePath, "utf-8");
+    } catch {
+      // new file
+    }
+
+    const newContent = String(args.content);
+    await fs.writeFile(filePath, newContent, "utf-8");
+    const lines = newContent.split("\n").length;
+
+    const patch = createPatch(filePath, oldContent, newContent, "", "", { context: 3 });
+    return `Written ${lines} lines to ${filePath}\n\n@@DIFF@@\n${patch}`;
   },
 };

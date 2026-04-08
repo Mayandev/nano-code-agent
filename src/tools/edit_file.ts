@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createPatch } from "diff";
 import type { ToolDefinition } from "../types.js";
 
 export const editFileTool: ToolDefinition = {
@@ -43,7 +44,8 @@ export const editFileTool: ToolDefinition = {
       updated = content.replace(oldStr, newStr);
     }
 
+    const patch = createPatch(filePath, content, updated, "", "", { context: 3 });
     await fs.writeFile(filePath, updated, "utf-8");
-    return `Replaced ${count} occurrence(s) in ${filePath}`;
+    return `Replaced ${count} occurrence(s) in ${filePath}\n\n@@DIFF@@\n${patch}`;
   },
 };
